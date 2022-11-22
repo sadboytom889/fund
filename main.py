@@ -75,8 +75,8 @@ print( "\n>  bt.signals\n%s\n\n" % bt.signals );
 print( "\n>  bt.positions\n%s\n\n" % bt.positions );
 print( "\n>  bt.trades\n%s\n\n" % bt.trades );
 
-# bt.summary();
-# bt.plot()
+bt.summary();
+bt.plot()
 
 
 

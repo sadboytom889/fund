@@ -243,10 +243,7 @@ class Backtest ( object ):
 
         groups = dataframe.groupby( "t", group_keys = False );
 
-        # todo
-        group_number = len( groups );
-
-        if group_number > 1:
+        if len( groups ) > 1:
             return groups.apply( parts.calculate_entry_prices, *args );
 
         else:
@@ -328,8 +325,16 @@ class Backtest ( object ):
 
         args = [ self.leverage, *list( dataframe_dict.keys() )[ 1 : ] ]
 
-        return pandas.DataFrame( dataframe_dict ).groupby(
-            "t", group_keys = False ).apply( parts.calculate_liq_prices, *args );
+        dataframe = pandas.DataFrame( dataframe_dict );
+
+        groups = dataframe.groupby( "t", group_keys = False );
+
+
+        if len( groups ) > 1:
+            return groups.apply( parts.calculate_liq_prices, *args );
+
+        else:
+            return parts.calculate_liq_prices( dataframe, *args );
 
     @cached_property
     def liqs ( self ):
@@ -341,10 +346,10 @@ class Backtest ( object ):
 
     @cached_property
     def rois ( self ):
-        ''' 投资回報率 ROI: 反映获利能力或效率(仅保留减仓或平仓周期的数据);
+        ''' 投资回報率 ROI: 反映获利能力或效率(仅保留减仓或平仓周期的数据, 未计算手续费);
 
-                     ROI = ( trade_prices - entry_prices ) / entry_prices
-                         = ( trade_prices / entry_prices ) - 1;
+                      ROI = ( trade_prices - entry_prices ) / entry_prices
+                          = ( trade_prices / entry_prices ) - 1;
         '''
 
         if self.positions is None:
@@ -417,16 +422,17 @@ class Backtest ( object ):
                                    index = self.positions.index );
 
         trades[ "times" ] = self.times;
+        trades[ "dir" ] = self.directions;
         trades[ "trade_prices" ] = self.trade_prices;
         trades[ "entry_prices" ] = self.entry_prices;
         trades[ "liq_prices" ] = self.liq_prices
         trades[ "diff_vols" ] = self.diff_volumes;
         trades[ "pos" ] = self.positions;
-        # trades[ "rois" ] = self.rois;
-        # trades[ "roas" ] = self.roas;
-        # trades[ "equitys" ] = self.equitys;
-        # trades[ "fees" ] = self.fees;
-        # trades[ "liqs" ] = self.liqs;
+        trades[ "rois" ] = self.rois;
+        trades[ "roas" ] = self.roas;
+        trades[ "equitys" ] = self.equitys;
+        trades[ "fees" ] = self.fees;
+        trades[ "liqs" ] = self.liqs;
 
         return trades;
 
@@ -514,8 +520,6 @@ class Backtest ( object ):
                        删注释, 并改为 False: # axes.unicode_minus: True ->
                                              axes.unicode_minus: False;
         '''
-
-        # print("self.equitys", self.equitys)
 
         parts.plot( self.ohlc );
 

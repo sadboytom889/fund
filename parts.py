@@ -49,7 +49,6 @@ def calculate_entry_prices ( group, positions_field,
 
     entry_prices_series = pandas.Series( data = 0.0,
                                          index = group[ positions_field ].index );
-    # print( "group", group )
 
     for index, row in group.iterrows():
 
@@ -77,8 +76,6 @@ def calculate_entry_prices ( group, positions_field,
            ( group[ diff_volumes_field ] == 0 );
 
     entry_prices_series = entry_prices_series.mask( cond, other = 0 );
-
-    print( "entry_prices_series 2", entry_prices_series )
 
     return entry_prices_series;
 
@@ -121,6 +118,12 @@ def calculate_liq_prices ( group, leverage,
 def calculate_equitys ( dataframe_dict, times_field,
                                         roas_field,
                                         fees_field ):
+    ''' 计算资产占比:
+        example                     roas  1 + roas = rate   ( 1 + roas ) * rate = equitys
+            100                      1.0              1.0                             0.0
+            110  ( 110 / 100 ) - 1 = 0.1    1 + 0.0 = 1.0                 1.1 * 1.0 = 1.1
+            121  ( 121 / 110 ) - 1 = 0.1    1 + 0.1 = 1.1                1.1 * 1.1 = 1.21
+    '''
 
     dataframe = pandas.DataFrame( dataframe_dict );
 
@@ -140,7 +143,7 @@ def calculate_equitys ( dataframe_dict, times_field,
 
         cumfees = cumfees * rate;
 
-        # equitys = equitys + cumfees;
+        equitys = equitys + cumfees;
 
         rate = equitys.iloc[ -1 ];
 
@@ -167,6 +170,8 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
 
     # 资产收益率;
     eqd = equitys[ roas != 0 ];
+    print("eqd", eqd)
+    print("eqd.diff()", eqd.diff())
     eqd = eqd.diff().fillna( value = eqd );
 
     # 资产占比;
