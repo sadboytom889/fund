@@ -7,6 +7,26 @@ from matplotlib import pyplot as plt;
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter, NullFormatter
 
 def calculate_positions ( signals, output_fields ):
+    ''' 计算持仓数据
+           e.g  profit  roas  1+last_eq=rate      (1+roas)*rate=eq
+        100.00     0.0   0.0           1.000    (1+0.0)*1.0=1.0000
+        110.00    10.0   0.1     1+0.0=1.000    (1+0.1)*1.0=1.1000
+        121.00    11.0   0.1     1+0.1=1.100    (1+0.1)*1.1=1.2100
+        108.90   -12.1  -0.1    1+0.21=1.210   (1-0.1)*1.21=1.0890
+         87.12  -21.78  -0.2   1+0.089=1.089  (1-0.2)*1.089=0.8712
+
+        avbl  buy  pos  diff  price  roi    roi*diff=roa  1+last_eq=rate      (1+roas)*rate=eq
+         100   10  0.1   0.0    100  0.1   0.1*0.0=0.0  
+               20  0.2   0.1    110  0.1   0.1*0.1=0.005
+               30  0.3   0.1    121  0.1   
+               10  0.1   0.05    121  0.1
+
+         pos  diff  price   roi               roa
+         0.1   0.1    100   0.1  0.1 * 0.1 = 0.01
+         0.2   0.1    110   0.1  0.1 * 0.1 = 0.01
+         0.3   0.1    121   0.1  0.1 * 0.1 = 0.01
+
+    '''
 
     if signals is None:
         return None;
@@ -21,20 +41,20 @@ def calculate_positions ( signals, output_fields ):
     for index, signal in signals.iterrows():
 
         if signal[ sell ] or signal[ cover ]:
-            if position > 0 and signal[ sell ]:
+            if position > 0 and signal[ sell ] and signal[ sell ] > 0:
                 position = position - position * signal[ sell ];
                 position = 0 if position < 0 else position;
 
-            if position < 0 and signal[ cover ]:
+            if position < 0 and signal[ cover ] and signal[ cover ] > 0:
                 position = position - position * signal[ cover ];
                 position = 0 if position > 0 else position;
 
         else:
-            if signal[ buy ]:
+            if signal[ buy ] and signal[ buy ] > 0:
                 position = 1 if position + signal[ buy ] > 1 else \
                                 position + signal[ buy ];
 
-            if signal[ short ]:
+            if signal[ short ] and signal[ short ] > 0:
                 position = -1 if position - signal[ short ] < -1 else \
                                  position - signal[ short ];
 
@@ -119,10 +139,12 @@ def calculate_equitys ( dataframe_dict, times_field,
                                         roas_field,
                                         fees_field ):
     ''' 计算资产占比:
-        example                     roas  1 + roas = rate   ( 1 + roas ) * rate = equitys
-            100                      1.0              1.0                             0.0
-            110  ( 110 / 100 ) - 1 = 0.1    1 + 0.0 = 1.0                 1.1 * 1.0 = 1.1
-            121  ( 121 / 110 ) - 1 = 0.1    1 + 0.1 = 1.1                1.1 * 1.1 = 1.21
+           e.g  profit  roas  1+last_eq=rate      (1+roas)*rate=eq
+        100.00     0.0   0.0           1.000    (1+0.0)*1.0=1.0000
+        110.00    10.0   0.1     1+0.0=1.000    (1+0.1)*1.0=1.1000
+        121.00    11.0   0.1     1+0.1=1.100    (1+0.1)*1.1=1.2100
+        108.90   -12.1  -0.1    1+0.21=1.210   (1-0.1)*1.21=1.0890
+         87.12  -21.78  -0.2   1+0.089=1.089  (1-0.2)*1.089=0.8712
     '''
 
     dataframe = pandas.DataFrame( dataframe_dict );
@@ -131,23 +153,27 @@ def calculate_equitys ( dataframe_dict, times_field,
 
     args = [];
 
-    rate = 1;
+    rate = 1.0;
 
     for times, group in grouped:
 
         equitys = 1 + group[ roas_field ].cumsum();
 
         cumfees = group[ fees_field ].cumsum();
-
+        print("rate", rate);
+        print("equitys 1", equitys);
         equitys = equitys * rate;
 
         cumfees = cumfees * rate;
 
-        equitys = equitys + cumfees;
+        #equitys = equitys + cumfees;
 
         rate = equitys.iloc[ -1 ];
-
-        args.append( equitys - 1 );
+        
+        print("equitys 2", equitys);
+        print("-------------");
+        # args.append( equitys - 1 );
+        args.append( equitys );
 
     return pandas.concat( args );
 
@@ -168,14 +194,14 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     # 减持次数;
     dec = len( diff_volumes[ diff_volumes * positions.shift() < 0 ] );
 
-    # 资产收益率;
-    eqd = equitys[ roas != 0 ];
-    print("eqd", eqd)
-    print("eqd.diff()", eqd.diff())
-    eqd = eqd.diff().fillna( value = eqd );
-
     # 资产占比;
-    eq = eqd.cumsum();
+    eq = equitys[ roas != 0 ];
+
+    # 资产变化占比;
+    eqd = eq.diff().fillna( value = eq );
+
+    print("eq", eq);
+    print("eqd", eqd);
 
     # 分钟级别资产收益率;
     minutes = eqd.resample( "T" ).sum();
@@ -188,11 +214,15 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     avloss = eqd[ eqd < 0 ].mean();
     avloss = 0 if numpy.isnan( avloss ) else avloss;
 
+    # 每笔操作的盈亏平均值;
+    average = eqd[ eqd != 0 ].mean();
+    average = 0 if numpy.isnan( average ) else average;
+
     # 最大回撤: 资产从高点到低点的最大回撤, 反映投资出现最糟糕的状况;
     maxdd = ( eq.expanding().max() - eq ).max();
 
     # 盈亏比: 较高的盈亏比代表承担相同的风险将获得更高的回报;
-    payoff = abs( avgain / avloss )
+    payoff = abs( avgain / avloss );
 
     # 获利因子: 反映每亏损一块钱可获利多少钱, 也就是在承受一单位的亏损风险能产生的报酬;
     pf = abs( eqd[ eqd > 0 ].sum() / eqd[ eqd < 0 ].sum() );
@@ -217,7 +247,7 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
                       len( eq ) ) ) ** 0.5;
 
     # 溃疡表现指数: 较高的马丁比率值代表更高的回报但承担更小的风险;
-    upi = eqd.mean() / ulcer
+    upi = eqd.mean() / ulcer;
 
     return ( {
         # 开始时间 = 历史数据起始时间;
@@ -248,22 +278,16 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
         "盈利次数(F)": sum( eqd > 0 ),
 
         # 持仓长度占比 = 持仓周期总长度 / 历史数据总长度;
-        "持仓长度(%)": float( hold / len( ohlc ) ) * 100,
-
-        # 操作次数占比 = 导致仓位变化的操作的次数 / 持仓长度;
-        "操作次数(%)": float( ops / hold ) * 100,
+        "持仓长度(%)": float( ( hold / len( ohlc ) ) * 100 ),
 
         # 买入次数占比 = 导致仓位增加的操作的次数 / 总操作次数;
-        "买入次数(%)": float( inc / ops ) * 100,
+        "买入次数(%)": float( ( inc / ops ) * 100 ),
 
         # 卖出次数占比 = 导致仓位减少的操作的次数 / 总操作次数;
-        "卖出次数(%)": float( dec / ops ) * 100,
+        "卖出次数(%)": float( ( dec / ops ) * 100 ) ,
 
         # 交易胜率 = 卖出次数中产生盈利的次数 / 卖出次数;
-        "交易胜率(%)": float( sum( eqd > 0 ) / len( eqd ) ) * 100,
-
-        # 交易败率 = 卖出次数中产生亏损的次数 / 卖出次数;
-        "交易败率(%)": float( sum( eqd < 0 ) / len( eqd ) ) * 100
+        "交易胜率(%)": float( sum( eqd > 0 ) / len( eqd ) * 100 )
     }, {
         # 平均盈利 = 盈利总额 / 盈利次数;
         "平均盈利(%)": float( avgain * 100 ),
@@ -272,7 +296,7 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
         "平均亏损(%)": float( avloss * 100 ),
 
         # 平均盈亏 = 盈亏总额 / 交易次数;
-        "平均盈亏(%)": float( eqd[ eqd != 0 ].mean() * 100 ),
+        "平均盈亏(%)": float( average * 100 ),
 
         # 累计盈亏 = ∑( 盈亏 + 盈亏 + ... );
         "累计盈亏(%)": float( eqd.sum() * 100 )

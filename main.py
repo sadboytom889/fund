@@ -66,7 +66,7 @@ cover = pd.Series( data = [           0.0,           0.0,           0.0, 0.0,
                             0.270 / 0.270,           0.0 ], index = index );
 ######################################################################################
 
-pd.set_option( "display.float_format", lambda x: "%.6f" % x );
+pd.set_option( "display.float_format", lambda x: "%.8f" % x );
 
 bt = backtest.Backtest( locals(), "Unknown" );
 

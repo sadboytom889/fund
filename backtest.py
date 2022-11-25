@@ -61,8 +61,8 @@ class Backtest ( object ):
     @cached_property
     def ohlc ( self ):
         ''' 行情历史数据: 在 store 中以键名 self.__ohlc_field 来查找并返回
-                        格式为 DataFrame 且索引为 DatetimeIndex 的 dataframe;
-                        若不存在或列名不在 self.__ohlc_need_include_fields 中返回 None;
+                         格式为 DataFrame 且索引为 DatetimeIndex 的 dataframe;
+                         若不存在或列名不在 self.__ohlc_need_include_fields 中返回 None;
         '''
 
         ohlc = self.__store.get( self.__ohlc_field );
@@ -80,12 +80,12 @@ class Backtest ( object ):
     @cached_property
     def signals ( self ):
         ''' 输入信号数据: 在 store 中以键名 self.__signal_fields 来查找并返回
-                        格式为 Series 且索引为 DatetimeIndex 的各信号列合并且与
-                        历史数据索引对应的 dataframe, 不符预期的数据填充为 0,
-                        若历史数据 ohlc 不存在则返回 None;
+                         格式为 Series 且索引为 DatetimeIndex 的各信号列合并且与
+                         历史数据索引对应的 dataframe, 不符预期的数据填充为 0,
+                         若历史数据 ohlc 不存在则返回 None;
 
-            各列数据含义: buy, short 列代表交易量在初始余额中的百分占比;
-                        sell, cover 列代表交易量在当前持仓的百分占比;
+            各列数据含义: buy, short 列代表在当次交易初始余额的交易量百分占比;
+                         sell, cover 列代表当前持仓的交易量百分占比;
         '''
 
         if self.ohlc is None:
@@ -109,8 +109,8 @@ class Backtest ( object ):
     @cached_property
     def positions ( self ):
         ''' 持仓数据总览: 返回使用信号数据 signals 生成的持仓数据 series,
-                        因信号根据市价即收盘价而计算得到, 故当前时间周期并未持仓,
-                        而实际持仓发生在产生信号的下个周期, 且以开盘价作为交易价格;
+                         因信号根据市价即收盘价而计算得到, 故当前时间周期并未持仓,
+                         而实际持仓发生在产生信号的下个周期, 且以开盘价作为交易价格;
         '''
 
         if self.signals is None:
@@ -135,17 +135,17 @@ class Backtest ( object ):
 
     @cached_property
     def diff_volumes ( self ):
-        ''' 持仓变化量数据: 代表交易量在初始资金中的占比( 开仓量占比, 补仓量占比,
-                                                   平仓量占比, 减仓量占比 );
+        ''' 交易金额占比变化数据: 指占本次交易初始资金中的比例( 开仓量占比, 补仓量占比,
+                                                            平仓量占比, 减仓量占比 );
 
-            例多头寸平仓: 已持多头头寸    position: 3/100;
+            例多头寸平仓:    已持多头头寸 position: 3/100;
                                                 * 已持有 3/100 初始资金的多头头寸;
 
-                        信号输入平仓        sell: 1/3;
+                                信号输入平仓 sell: 1/3;
                                                 * 平掉已持有仓位的 1/3;
                                                 * 平仓后持有的多头寸占比为 2/3;
 
-                        持仓位变化量 diff_volume: 3/100 * 1/3 = 1/100;
+                         持仓位变化量 diff_volume: 3/100 * 1/3 = 1/100;
                                                 * 平仓量在初始资金的占比为 1/100,
                                                 * 平仓后持有的多头寸在初始资金占比为 2/100;
         '''
@@ -253,9 +253,12 @@ class Backtest ( object ):
     def fees ( self ):
         ''' 手续费占比数据;
 
-                             avbl * diff_volume (交易金额)
-            交易数量: size = ----------------------------- * leverage;
-                                entry_price (交易价格)
+            1: 计算依据当笔交易金额占比数据 diff_volume;
+
+
+                             avbl * diff_volume (交易金额占比)
+            交易数量: size = --------------------------------- * leverage;
+                                  entry_price (交易价格)
 
             手续费占比: fees
 
@@ -267,9 +270,9 @@ class Backtest ( object ):
                     = ----------- * leverage * trade_price * fee_rate
                       entry_price
 
-                    *平仓与减仓代入: trade_price = trade_price;
+                    *平仓与减仓: trade_price = trade_price;
 
-                    *开仓与补仓代入: trade_price = entry_price;
+                    *开仓与补仓: trade_price = entry_price;
             '''
 
         if self.positions is None:
@@ -346,10 +349,15 @@ class Backtest ( object ):
 
     @cached_property
     def rois ( self ):
-        ''' 投资回報率 ROI: 反映获利能力或效率(仅保留减仓或平仓周期的数据, 未计算手续费);
+        ''' 投资回報率 ROI: 反映获利能力或效率;
 
-                      ROI = ( trade_prices - entry_prices ) / entry_prices
-                          = ( trade_prices / entry_prices ) - 1;
+            1: 计算依据当笔交易金额占比数据 diff_volume;
+            2: 仅保留减仓或平仓周期的数据;
+            3: 未计算手续费;
+
+            ROI = ( trade_prices - entry_prices ) / entry_prices
+                = ( trade_prices / entry_prices ) - 1;
+
         '''
 
         if self.positions is None:
@@ -368,16 +376,21 @@ class Backtest ( object ):
 
     @cached_property
     def roas ( self ):
-        ''' 资产回报率 ROA: 反映每单位资产创造利润的指标(未计算手续费);
+        ''' 资产回报率 ROA: 反映每单位资产创造利润的指标;
 
-                       avbl + avbl * diff_volume * roi - avbl
-                 ROA = --------------------------------------;
-                                      avbl
-                       avbl * ( 1 + diff_volume * roi - 1 )
-                     = ------------------------------------;
-                                     avbl
+            1: 计算依据当笔交易;
+            2: 仅保留减仓或平仓周期的数据;
+            3: 未计算手续费;
 
-                     = diff_volume * roi;
+                  avbl + avbl * diff_volume * roi - avbl
+            ROA = --------------------------------------;
+                                 avbl
+
+                  avbl * ( 1 + diff_volume * roi - 1 )
+                = ------------------------------------;
+                                avbl
+
+                = diff_volume * roi;
         '''
 
         if self.positions is None:
@@ -393,10 +406,10 @@ class Backtest ( object ):
         ''' 资产占比数据: 反映资产的变化(已计算手续费)
             1: 按照交易次数为交易分组;
 
-            2: 组内使用资产回报率累加计算资产;
-               组内使用手续费累加计算总手续费;
+            2: 组内使用资产回报率 ROA 累加计算资产;
+               组内使用手续费 fee 累加计算总手续费;
 
-            3: 组内计算真实资产变化;
+            3: 组内计算真实资产占比;
         '''
 
         if self.positions is None:
