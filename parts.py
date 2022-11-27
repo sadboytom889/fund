@@ -7,26 +7,6 @@ from matplotlib import pyplot as plt;
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter, NullFormatter
 
 def calculate_positions ( signals, output_fields ):
-    ''' 计算持仓数据
-           e.g  profit  roas  1+last_eq=rate      (1+roas)*rate=eq
-        100.00     0.0   0.0           1.000    (1+0.0)*1.0=1.0000
-        110.00    10.0   0.1     1+0.0=1.000    (1+0.1)*1.0=1.1000
-        121.00    11.0   0.1     1+0.1=1.100    (1+0.1)*1.1=1.2100
-        108.90   -12.1  -0.1    1+0.21=1.210   (1-0.1)*1.21=1.0890
-         87.12  -21.78  -0.2   1+0.089=1.089  (1-0.2)*1.089=0.8712
-
-        avbl  buy  pos  diff  price  roi    roi*diff=roa  1+last_eq=rate      (1+roas)*rate=eq
-         100   10  0.1   0.0    100  0.1   0.1*0.0=0.0  
-               20  0.2   0.1    110  0.1   0.1*0.1=0.005
-               30  0.3   0.1    121  0.1   
-               10  0.1   0.05    121  0.1
-
-         pos  diff  price   roi               roa
-         0.1   0.1    100   0.1  0.1 * 0.1 = 0.01
-         0.2   0.1    110   0.1  0.1 * 0.1 = 0.01
-         0.3   0.1    121   0.1  0.1 * 0.1 = 0.01
-
-    '''
 
     if signals is None:
         return None;
@@ -139,12 +119,21 @@ def calculate_equitys ( dataframe_dict, times_field,
                                         roas_field,
                                         fees_field ):
     ''' 计算资产占比:
-           e.g  profit  roas  1+last_eq=rate      (1+roas)*rate=eq
-        100.00     0.0   0.0           1.000    (1+0.0)*1.0=1.0000
-        110.00    10.0   0.1     1+0.0=1.000    (1+0.1)*1.0=1.1000
-        121.00    11.0   0.1     1+0.1=1.100    (1+0.1)*1.1=1.2100
-        108.90   -12.1  -0.1    1+0.21=1.210   (1-0.1)*1.21=1.0890
-         87.12  -21.78  -0.2   1+0.089=1.089  (1-0.2)*1.089=0.8712
+        组内例:
+        avbl  price  roi  buy    profit  pos  diff  roi*diff=roa   cumsumroa
+         100  100.0  0.0   10     0*0=0  0.0   0.0  0.0*0.0=0.00        0.00
+              110.0  0.1   20  10*0.1=1  0.1   0.1  0.1*0.1=0.01  100*0.01=1
+              121.0  0.1   30  20*0.1=2  0.3   0.2  0.1*0.2=0.02  100*0.02=2
+              133.1  0.1   10  30*0.1=3  0.6   0.3  0.1*0.3=0.03  100*0.03=3
+              133.1  0.0    0  10*0.0=0  0.7   0.1  0.0*0.1=0.00  100*0.00=0
+
+        组间例:
+          avbl  profit  roas  1+last_eq=rate      (1+roas)*rate=eq       eqd
+        100.00     0.0   0.0           1.000    (1+0.0)*1.0=1.0000       0.0
+        110.00    10.0   0.1     1+0.0=1.000    (1+0.1)*1.0=1.1000       0.1
+        121.00    11.0   0.1     1+0.1=1.100    (1+0.1)*1.1=1.2100      0.11
+        108.90   -12.1  -0.1    1+0.21=1.210   (1-0.1)*1.21=1.0890    -0.121
+         87.12  -21.78  -0.2   1+0.089=1.089  (1-0.2)*1.089=0.8712   -0.2178
     '''
 
     dataframe = pandas.DataFrame( dataframe_dict );
@@ -160,19 +149,15 @@ def calculate_equitys ( dataframe_dict, times_field,
         equitys = 1 + group[ roas_field ].cumsum();
 
         cumfees = group[ fees_field ].cumsum();
-        print("rate", rate);
-        print("equitys 1", equitys);
+
         equitys = equitys * rate;
 
         cumfees = cumfees * rate;
 
-        #equitys = equitys + cumfees;
+        equitys = equitys + cumfees;
 
         rate = equitys.iloc[ -1 ];
-        
-        print("equitys 2", equitys);
-        print("-------------");
-        # args.append( equitys - 1 );
+
         args.append( equitys );
 
     return pandas.concat( args );
@@ -198,10 +183,12 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     eq = equitys[ roas != 0 ];
 
     # 资产变化占比;
-    eqd = eq.diff().fillna( value = eq );
+    eqd = eq.diff().fillna( value = ( 1 - eq ) );
 
-    print("eq", eq);
-    print("eqd", eqd);
+    print("eq", eq)
+    print("eq.expanding().max()", eq.expanding().max())
+    print("eq.expanding().max() - eq", eq.expanding().max() - eq)
+    print("eq.expanding().max() - eq", (eq.expanding().max() - eq).max())
 
     # 分钟级别资产收益率;
     minutes = eqd.resample( "T" ).sum();
@@ -222,6 +209,25 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     maxdd = ( eq.expanding().max() - eq ).max();
 
     # 盈亏比: 较高的盈亏比代表承担相同的风险将获得更高的回报;
+    # 例: 总获利 100, 总亏损 50, 盈虧比 = 100 / 50 = 2, 表示每赚 2 元需付出 1 元的亏损, 反映交易获利时所承担的风险;
+    
+    '''
+    全部: 10.0 + 11.0 -12.1 -21.78 = -12.88
+
+    总赚: 10.0 + 11.0 = 21
+
+    总亏: -12.1 - 21.78 = -33.88
+
+    盈亏比: 21 / 33.88 = 0.6198347107438016
+
+    平均赚钱: (10.0 + 11.0) / 2 = 10.5
+
+    平均亏钱: (12.1 + 21.78) / 2 = 16.94
+
+    盈亏比: 10.5 / 16.94 = 0.61983471074
+    '''
+
+
     payoff = abs( avgain / avloss );
 
     # 获利因子: 反映每亏损一块钱可获利多少钱, 也就是在承受一单位的亏损风险能产生的报酬;
