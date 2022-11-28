@@ -128,13 +128,27 @@ def calculate_equitys ( dataframe_dict, times_field,
               133.1  0.0    0  10*0.0=0  0.7   0.1  0.0*0.1=0.00  100*0.00=0
 
         组间例:
-          avbl  profit  roas  1+last_eq=rate      (1+roas)*rate=eq       eqd
-        100.00     0.0   0.0           1.000    (1+0.0)*1.0=1.0000       0.0
-        110.00    10.0   0.1     1+0.0=1.000    (1+0.1)*1.0=1.1000       0.1
-        121.00    11.0   0.1     1+0.1=1.100    (1+0.1)*1.1=1.2100      0.11
-        108.90   -12.1  -0.1    1+0.21=1.210   (1-0.1)*1.21=1.0890    -0.121
-         87.12  -21.78  -0.2   1+0.089=1.089  (1-0.2)*1.089=0.8712   -0.2178
+          avbl  profit  roas  last_eq=rate       (1+roas)*rate=eq      eqd
+        100.00     0.0   0.0        1.0000     (1+0.0)*1.0=1.0000      0.0
+        110.00    10.0   0.1        1.0000     (1+0.1)*1.0=1.1000      0.1
+        121.00    11.0   0.1        1.1000     (1+0.1)*1.1=1.2100     0.11
+        108.90   -12.1  -0.1        1.2100    (1-0.1)*1.21=1.0890   -0.121
+         87.12  -21.78  -0.2        1.0890   (1-0.2)*1.089=0.8712  -0.2178
+        130.68   43.56   0.5        0.8712  (1+0.5)*0.8712=1.3068   0.4356
+
+         10.0                                     0.1
+         11.0     -12.1                          0.11      -0.121
+        43.56    -21.78                        0.4356     -0.2178
+      = 64.56  = -33.88                      = 0.6456   = -0.3388
+
+        64.56 / 33.88                          0.6456 / 0.3388
+      = 1.90554899646                        = 1.90554899646
+
+        ( 64.56 / 3 ) / ( 33.88 / 2 )          ( 0.6456 / 3 ) / ( 0.3388 / 2 )
+      = 1.27036599764                        = 1.27036599764
     '''
+
+
 
     dataframe = pandas.DataFrame( dataframe_dict );
 
@@ -154,7 +168,7 @@ def calculate_equitys ( dataframe_dict, times_field,
 
         cumfees = cumfees * rate;
 
-        equitys = equitys + cumfees;
+        # equitys = equitys + cumfees;
 
         rate = equitys.iloc[ -1 ];
 
@@ -166,6 +180,12 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
 
     # 历史数据周期频率;
     freq = ohlc.index.inferred_freq;
+
+    # 资产占比;
+    eq = equitys[ roas != 0 ];
+
+    # 资产变化占比;
+    eqd = eq.diff().fillna( value = ( 1 - eq ) );
 
     # 持仓长度;
     hold = len( positions[ positions != 0 ] );
@@ -179,59 +199,58 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     # 减持次数;
     dec = len( diff_volumes[ diff_volumes * positions.shift() < 0 ] );
 
-    # 资产占比;
-    eq = equitys[ roas != 0 ];
+    # 增持操作占总操作次数百分比;
+    inc_pct = ( inc / ops ) if ops else 0;
 
-    # 资产变化占比;
-    eqd = eq.diff().fillna( value = ( 1 - eq ) );
+    # 减持操作占总操作次数百分比;
+    dec_pct = ( dec / ops ) if ops else 0;
 
-    print("eq", eq)
-    print("eq.expanding().max()", eq.expanding().max())
-    print("eq.expanding().max() - eq", eq.expanding().max() - eq)
-    print("eq.expanding().max() - eq", (eq.expanding().max() - eq).max())
+    # 减持操作中产生盈利的次数占总操作次数百分比;
+    win_pct = ( sum( eqd > 0 ) / len( eqd ) ) if len( eqd ) else 0;
 
     # 分钟级别资产收益率;
     minutes = eqd.resample( "T" ).sum();
 
+    # 盈利列;
+    gain_series = eqd[ eqd > 0 ];
+
+    # 亏损列;
+    loss_series = eqd[ eqd < 0 ];
+
+    # 盈亏列;
+    total_series = eqd[ eqd != 0 ];
+
+    # 盈利总额;
+    gain = gain_series.sum();
+
+    # 亏损总额;
+    loss = loss_series.sum();
+
+    # 盈亏总额;
+    total = total_series.sum();
+
     # 盈利操作的平均值;
-    avgain = eqd[ eqd > 0 ].mean();
-    avgain = 0 if numpy.isnan( avgain ) else avgain;
+    avgain = gain_series.mean() if len( gain_series ) else 0;
 
     # 亏损操作的平均值;
-    avloss = eqd[ eqd < 0 ].mean();
-    avloss = 0 if numpy.isnan( avloss ) else avloss;
+    avloss = loss_series.mean() if len( loss_series ) else 0;
 
     # 每笔操作的盈亏平均值;
-    average = eqd[ eqd != 0 ].mean();
-    average = 0 if numpy.isnan( average ) else average;
+    average = total_series.mean() if len( total_series ) else 0;
 
     # 最大回撤: 资产从高点到低点的最大回撤, 反映投资出现最糟糕的状况;
     maxdd = ( eq.expanding().max() - eq ).max();
 
-    # 盈亏比: 较高的盈亏比代表承担相同的风险将获得更高的回报;
-    # 例: 总获利 100, 总亏损 50, 盈虧比 = 100 / 50 = 2, 表示每赚 2 元需付出 1 元的亏损, 反映交易获利时所承担的风险;
-    
-    '''
-    全部: 10.0 + 11.0 -12.1 -21.78 = -12.88
+    # 平均盈亏比: 平均盈利与平均亏损之比, 反映承担一定风险的获利;
+    # 盈亏比越高代表承担相同风险将获更高回报;
+    # 例: 获利 10, 亏损 5, 盈亏比为 10 / 5 = 2;
+    # 盈亏比为 2 代表每盈利 2 元将付出亏损 1 元, ( 冒亏损 1 元钱的风险获利 2 元 );
+    # 盈亏比为 3 代表每盈利 3 元将付出亏损 1 元, ( 冒亏损 1 元钱的风险获利 3 元 );
+    # 平均盈亏比高于 2 便称得上是不错的系统, 通常会将此数据与胜率作比较;
+    payoff = abs( avgain / avloss ) if avloss else 0;
 
-    总赚: 10.0 + 11.0 = 21
-
-    总亏: -12.1 - 21.78 = -33.88
-
-    盈亏比: 21 / 33.88 = 0.6198347107438016
-
-    平均赚钱: (10.0 + 11.0) / 2 = 10.5
-
-    平均亏钱: (12.1 + 21.78) / 2 = 16.94
-
-    盈亏比: 10.5 / 16.94 = 0.61983471074
-    '''
-
-
-    payoff = abs( avgain / avloss );
-
-    # 获利因子: 反映每亏损一块钱可获利多少钱, 也就是在承受一单位的亏损风险能产生的报酬;
-    pf = abs( eqd[ eqd > 0 ].sum() / eqd[ eqd < 0 ].sum() );
+    # 获利因子: 总盈利与总亏损之比, 反映承担单位亏损可得的获利;
+    pf = abs( gain / loss ) if loss else 0;
 
     # 回收系数: 该系数一般大于 1, 该系数越大代表投资收益发生回撤后恢复的越快;
     rf = eqd.sum() / maxdd;
@@ -287,14 +306,23 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
         "持仓长度(%)": float( ( hold / len( ohlc ) ) * 100 ),
 
         # 买入次数占比 = 导致仓位增加的操作的次数 / 总操作次数;
-        "买入次数(%)": float( ( inc / ops ) * 100 ),
+        "买入次数(%)": float( inc_pct * 100 ),
 
         # 卖出次数占比 = 导致仓位减少的操作的次数 / 总操作次数;
-        "卖出次数(%)": float( ( dec / ops ) * 100 ) ,
+        "卖出次数(%)": float( dec_pct * 100 ) ,
 
         # 交易胜率 = 卖出次数中产生盈利的次数 / 卖出次数;
-        "交易胜率(%)": float( sum( eqd > 0 ) / len( eqd ) * 100 )
+        "交易胜率(%)": float( win_pct * 100 )
     }, {
+        # 盈利总额 = ∑( 盈利 + 盈利 + ... );
+        "盈利总额(%)": float( gain * 100 ),
+
+        # 亏损总额 = ∑( 亏损 + 亏损 + ... );
+        "亏损总额(%)": float( loss * 100 ),
+
+        # 盈亏总额 = ∑( 盈亏 + 盈亏 + ... );
+        "盈亏总额(%)": float( total * 100 ),
+
         # 平均盈利 = 盈利总额 / 盈利次数;
         "平均盈利(%)": float( avgain * 100 ),
 
@@ -302,10 +330,7 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
         "平均亏损(%)": float( avloss * 100 ),
 
         # 平均盈亏 = 盈亏总额 / 交易次数;
-        "平均盈亏(%)": float( average * 100 ),
-
-        # 累计盈亏 = ∑( 盈亏 + 盈亏 + ... );
-        "累计盈亏(%)": float( eqd.sum() * 100 )
+        "平均盈亏(%)": float( average * 100 )
     }, {
         # 最大回撤 = eq.expanding.max - eq;
         "最大回撤(%)": float( maxdd * 100 ),
