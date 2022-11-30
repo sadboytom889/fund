@@ -256,9 +256,13 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     payoff = abs( avgain / avloss ) if avloss else 0;
 
     # 获利因子: 总盈利与总亏损之比, 反映承担单位亏损可得的获利;
+    # 获利因子为 2 代表平均盈利 2 元则将亏损 1 元;
     pf = abs( gain / loss ) if loss else 0;
 
-    # 回收系数: 该系数一般大于 1, 该系数越大代表投资收益发生回撤后恢复的越快;
+    # 回收系数: 总盈亏除以最大回撤, 该系数越大代表投资收益发生回撤后恢复的越快;
+    # 该系数一般大于 1
+
+    # Recovery Factor 在出现亏损情况下，恢复因子越大，加仓数越大，盈利空间越大，同时风险越大
     rf = eqd.sum() / maxdd;
 
     # 夏普比率: 承受一单位的总风险产生的报酬, 较高的夏普比率代表承担相同单位风险获取更高收益;
