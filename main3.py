@@ -2,7 +2,7 @@ import backtest;
 import pandas as pd;
 
 # 杠杠倍数;
-leverage = 25;
+leverage = 125;
 
 # 手续费率;
 fee_rate = 0.0004;
