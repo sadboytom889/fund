@@ -137,12 +137,17 @@ def calculate_equitys ( dataframe_dict, times_field,
         130.68   43.56   0.5        0.8712  (1+0.5)*0.8712=1.3068   0.4356
     '''
 
-    test = [ 1.0000, 1.1000, 1.2100, 1.0890, 0.8712, 1.3068 ];
-    test = pandas.Series( test );
-    
-    print( "test1", test.expanding().max() - test )
-    print( "test2", test )
-    print( "test3", ( test.expanding().max() - test ).max() )
+    # test = [ 1.0000, 1.1000, 1.2100, 1.0890, 0.8712, 1.3068 ];
+    # # test = [    0.0,    0.1,   0.11, -0.121,-0.2178, 0.4356 ];
+    # # test = [ 100.00, 110.00, 121.00, 108.90,  87.12, 130.68 ];
+
+    # test = pandas.Series( test );
+
+    # print( "test1", test.expanding().max() )
+    # print( "test2", test )
+    # print( "test3", test.expanding().max() - test );
+    # print( "test4", ( test.expanding().max() - test ).max() );
+    # print( "test5", ( test.expanding().max() - test ) / test.expanding().max() );
 
     dataframe = pandas.DataFrame( dataframe_dict );
 
@@ -254,16 +259,20 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     average = total_series.mean() if len( total_series ) else 0;
 
     # 最大回撤: 资产从高点到低点的最大回撤, 反映投资出现最糟糕的状况;
-    maxdd = ( eq.expanding().max() - eq ).max();
+    maxdd = ( ( eq.expanding().max() - eq ) / eq.expanding().max() ).max();
 
     # 平均盈亏比: 平均盈利与平均亏损之比, 反映承担一定风险的获利;
     # 盈亏比为 2 代表每盈利 2 元将亏损 1 元, 冒亏损 1 元钱的风险获利 2 元;
     payoff = abs( avgain / avloss ) if avloss else 0;
 
     # 获利因子: 总盈利与总亏损之比, 反映承担单位亏损可得的获利;
+    # 获利因子为 2 代表平均盈利 2 元则将亏损 1 元;
     pf = abs( gain / loss ) if loss else 0;
 
-    # 回收系数: 该系数一般大于 1, 该系数越大代表投资收益发生回撤后恢复的越快;
+    # 回收系数: 总盈亏除以最大回撤, 该系数越大代表投资收益发生回撤后恢复的越快;
+    # 该系数一般大于 1
+
+    # Recovery Factor 在出现亏损情况下，恢复因子越大，加仓数越大，盈利空间越大，同时风险越大
     rf = eqd.sum() / maxdd;
 
     # 夏普比率: 承受一单位的总风险产生的报酬, 较高的夏普比率代表承担相同单位风险获取更高收益;
@@ -343,7 +352,7 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
         # 平均盈亏 = 盈亏总额 / 交易次数;
         "平均盈亏(%)": float( average * 100 )
     }, {
-        # 最大回撤 = eq.expanding.max - eq;
+        # 最大回撤 = ( ( eq.expanding.max - eq ) / eq.expanding.max ).max;
         "最大回撤(%)": float( maxdd * 100 ),
 
         # 盈亏比 = 平均盈利 / 平均亏损;
