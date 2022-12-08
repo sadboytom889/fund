@@ -137,18 +137,6 @@ def calculate_equitys ( dataframe_dict, times_field,
         130.68   43.56   0.5        0.8712  (1+0.5)*0.8712=1.3068   0.4356
     '''
 
-    # test = [ 1.0000, 1.1000, 1.2100, 1.0890, 0.8712, 1.3068 ];
-    # # test = [    0.0,    0.1,   0.11, -0.121,-0.2178, 0.4356 ];
-    # # test = [ 100.00, 110.00, 121.00, 108.90,  87.12, 130.68 ];
-
-    # test = pandas.Series( test );
-
-    # print( "test1", test.expanding().max() )
-    # print( "test2", test )
-    # print( "test3", test.expanding().max() - test );
-    # print( "test4", ( test.expanding().max() - test ).max() );
-    # print( "test5", ( test.expanding().max() - test ) / test.expanding().max() );
-
     dataframe = pandas.DataFrame( dataframe_dict );
 
     grouped = dataframe.groupby( times_field, group_keys = False );
@@ -185,17 +173,70 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
          87.12  -21.78  -0.2  0.8712  -0.2178
         130.68   43.56   0.5  1.3068   0.4356
 
-        gain = 10.0 + 11.0
-         10.0                                     0.1
-         11.0     -12.1                          0.11      -0.121
-        43.56    -21.78                        0.4356     -0.2178
-      = 64.56  = -33.88                      = 0.6456   = -0.3388
+        # 盈利总额占比
+        gain1 = ( 10.0 + 11.0 + 43.56 ) / 100
+              = 0.6456;
+        gain2 = 0.1 + 0.11 + 0.4356
+              = 0.6456;
 
-        64.56 / 33.88                          0.6456 / 0.3388
-      = 1.90554899646                        = 1.90554899646
+        # 亏损总额占比
+        loss1 = ( -12.1 - 21.78 ) / 100
+              = -0.3388;
+        loss2 = -0.121 - 0.2178
+              = -0.3388;
 
-        ( 64.56 / 3 ) / ( 33.88 / 2 )          ( 0.6456 / 3 ) / ( 0.3388 / 2 )
-      = 1.27036599764                        = 1.27036599764
+        # 盈亏总额占比
+        total1 = ( 10.0 + 11.0 - 12.1 - 21.78 + 43.56 ) / 100
+               = 0.3068;
+        total2 = 0.1 + 0.11 - 0.121 - 0.2178 + 0.4356
+               = 0.3068;
+
+        # 平均盈利占比
+        avgain1 = ( 10.0 + 11.0 + 43.56 ) / 3 / 100
+                = 0.2152;
+        avgain2 = ( 0.1 + 0.11 + 0.4356 ) / 3
+                = 0.2152;
+
+        # 平均亏损占比
+        avloss1 = ( -12.1 - 21.78 ) / 2 / 100
+                = -0.1694;
+        avloss2 = ( -0.121 - 0.2178 ) / 2
+                = -0.1694;
+
+        # 平均盈亏占比:
+        average1 = ( 10.0 + 11.0 - 12.1 - 21.78 + 43.56 ) / 5 / 100
+                 = 0.06136;
+        average2 = ( 0.1 + 0.11 - 0.121 - 0.2178 + 0.4356 ) / 5
+                 = 0.06136;
+
+        # 平均盈亏比:
+        payoff1 = ( ( 10.0 + 11.0 + 43.56 ) / 3 ) / abs( ( -12.1 - 21.78 ) / 2 )
+                = 1.27036599764;
+        payoff2 = ( ( 0.1 + 0.11 + 0.4356 ) / 3 ) / abs( ( -0.121 - 0.2178 ) / 2 )
+                = 1.27036599764;
+
+        # 获利因子
+        pf1 = ( 10.0 + 11.0 + 43.56 ) / abs( -12.1 - 21.78 )
+            = 1.90554899646;
+        pf2 = ( 0.1 + 0.11 + 0.4356 ) / abs( -0.121 - 0.2178 )
+            = 1.90554899646;
+
+        # 最大回撤
+        eq1 = pandas.Series( [ 100.00, 110.00, 121.00, 108.90,  87.12, 130.68 ] );
+        eq2 = pandas.Series( [ 1.0000, 1.1000, 1.2100, 1.0890, 0.8712, 1.3068 ] );
+
+        maxdd1 = ( 121.00 - 87.12 ) / 121.00
+               = 0.28;
+        maxdd2 = ( ( eq1.expanding().max() - eq1 ) / eq1.expanding().max() ).max()
+               = 0.27999999999999997;
+        maxdd3 = ( ( eq2.expanding().max() - eq2 ) / eq2.expanding().max() ).max()
+               = 0.28;
+
+        # 恢复因子
+        rf1 = ( ( 10.0 + 11.0 - 12.1 - 21.78 + 43.56 ) / 100 ) / 0.28
+            = 1.09571428571;
+        rf2 = ( 0.1 + 0.11 - 0.121 - 0.2178 + 0.4356 ) / 0.28
+            = 1.09571428571;
     '''
 
     # 历史数据周期频率;
@@ -205,7 +246,10 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     eq = equitys[ roas != 0 ];
 
     # 资产变化占比;
-    eqd = eq.diff().fillna( value = ( 1 - eq ) );
+    eqd = eq.diff().fillna( value = ( eq - 1 ) );
+
+    # 分钟级别资产收益率;
+    days = eqd.resample( "D" ).sum();
 
     # 持仓长度;
     hold = len( positions[ positions != 0 ] );
@@ -228,9 +272,6 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     # 减持操作中产生盈利的次数占总操作次数百分比;
     win_pct = ( sum( eqd > 0 ) / len( eqd ) ) if len( eqd ) else 0;
 
-    # 分钟级别资产收益率;
-    minutes = eqd.resample( "T" ).sum();
-
     # 盈利列;
     gain_series = eqd[ eqd > 0 ];
 
@@ -244,7 +285,7 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     gain = gain_series.sum();
 
     # 亏损总额;
-    loss = loss_series.sum();
+    loss = abs( loss_series.sum() );
 
     # 盈亏总额;
     total = total_series.sum();
@@ -253,7 +294,7 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     avgain = gain_series.mean() if len( gain_series ) else 0;
 
     # 亏损操作的平均值;
-    avloss = loss_series.mean() if len( loss_series ) else 0;
+    avloss = abs( loss_series.mean() ) if len( loss_series ) else 0;
 
     # 每笔操作的盈亏平均值;
     average = total_series.mean() if len( total_series ) else 0;
@@ -262,30 +303,26 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     maxdd = ( ( eq.expanding().max() - eq ) / eq.expanding().max() ).max();
 
     # 平均盈亏比: 平均盈利与平均亏损之比, 反映承担一定风险的获利;
-    # 盈亏比为 2 代表每盈利 2 元将亏损 1 元, 冒亏损 1 元钱的风险获利 2 元;
+    # 平均盈亏比为 2 代表每盈利 2 元将亏损 1 元, 冒亏损 1 元钱的风险获利 2 元;
     payoff = abs( avgain / avloss ) if avloss else 0;
 
     # 获利因子: 总盈利与总亏损之比, 反映承担单位亏损可得的获利;
     # 获利因子为 2 代表平均盈利 2 元则将亏损 1 元;
     pf = abs( gain / loss ) if loss else 0;
 
-    # 回收系数: 总盈亏除以最大回撤, 该系数越大代表投资收益发生回撤后恢复的越快;
-    # 该系数一般大于 1
+    # 恢复因子: 总盈亏除以最大回撤, 反映投资收益发生回撤后恢复的快慢程度;
+    # 恢复因子为 1 代表从回撤中恢复需 1 倍回测长度, 若为 2 则代表 0.5 倍回测长度;
+    rf = total / maxdd;
 
-    # Recovery Factor 在出现亏损情况下，恢复因子越大，加仓数越大，盈利空间越大，同时风险越大
-    rf = eqd.sum() / maxdd;
-
-    # 夏普比率: 承受一单位的总风险产生的报酬, 较高的夏普比率代表承担相同单位风险获取更高收益;
-    # 分子平均值 μ 代表收益, 均值越大代表收益越高, 夏普比例越高;
+    # 夏普比率: 承受一单位的总风险产生的报酬, 反映承担相同单位风险可得的收益;
+    # 分子报酬率 μ 代表收益, 任意周期报酬率都需转换成年报酬率, 均值越大则收益越高, 夏普比例越高;
     # 分母标准差 σ 代表风险, 标准差越趋近 0 则样本离散程度越小, 夏普比例越高;
     # 年交易转化数平方根: ( a / √(a) ) = √(a);
-    sharpe = ( minutes.mean() / minutes.std() ) * \
-             ( ( 60 * 24 * 365 ) ** 0.5 );
+    sharpe = ( days.mean() / days.std() ) * ( 365 ** 0.5 );
 
     # 索提诺比率: 承受一单位的下行风险产生的报酬, 运用下偏而非总标准差以区别不利的波动,
     #           较高的该比率代表相同单位下行风险获取更高收益;
-    sortino = ( minutes.mean() / minutes[ minutes < 0 ].std() ) * \
-              ( ( 60 * 24 * 365 ) ** 0.5 );
+    sortino = ( days.mean() / days[ days < 0 ].std() ) * ( 365 ** 0.5 );
 
     # 溃疡指数: 根据价格下跌深度和持续时间衡量下行风险的度量值, 较高的溃疡指数代表较高的回撤风险;
     ulcer = ( ( ( ( ( eq - eq.expanding().max() ) * 100 ) ** 2 ).sum() / \
@@ -361,13 +398,13 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
         # 获利因子 = 总盈利 / 总亏损;
         "获利因子": float( pf ),
 
-        # 回收系数 = 总盈亏 / 最大回撤;
-        "回收系数": float( rf ),
+        # 恢复因子 = 总盈亏 / 最大回撤;
+        "恢复因子": float( rf ),
 
-        # 夏普比率 = ( ( 周期报酬率平均值 - 无风险利率 ) / 周期报酬率标准差 ) * 年交易转化数平方根;
+        # 夏普比率 = ( ( 周期报酬率 - 无风险利率 ) / 周期报酬率标准差 ) * 年交易转化数平方根;
         "夏普比率": float( sharpe ),
 
-        # 索提诺比率 = ( 周期报酬率平均值 – 无风险利率 ) / 周期亏损率标准差 * 年交易转化数平方根;
+        # 索提诺比率 = ( 周期报酬率 – 无风险利率 ) / 周期亏损率标准差 * 年交易转化数平方根;
         "索提比率": float( sortino ),
 
         # 溃疡指数 = √( ∑( 百分比回撤² ) / 周期数 );
