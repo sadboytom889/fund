@@ -613,20 +613,26 @@ def make_mpf_style ():
 
 def plot ( ohlc ):
 
+    # margin of left and top;
     l = t = 0.045;
 
+    # margin of right and bottom;
     r = b = 0.065;
 
+    # height;
     h = 1 - t - b;
 
+    # width;
     w = 1 - l - r;
 
+    # 图表风格;
     style = make_mpf_style();
-
     fig = mplfinance.figure( style = style );
 
+    # K 线图图表占比
     h_o = ( 1 - t - b ) * 0.90;
 
+    # 交易量图表占比
     h_v = ( 1 - t - b ) * 0.10;
 
     h_e = ( 1 - t - b ) * 0.10;
@@ -652,7 +658,7 @@ def plot ( ohlc ):
 
     # add_plot = [ mplfinance.make_addplot( ohlc[ "Close" ] ) ];
 
-    
+    print( "ohlc", ohlc )
 
 
     mplfinance.plot( data = ohlc,
