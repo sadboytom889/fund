@@ -155,7 +155,7 @@ def calculate_equitys ( dataframe_dict, times_field,
 
         cumfees = cumfees * rate;
 
-        # equitys = equitys + cumfees;
+        equitys = equitys + cumfees;
 
         rate = equitys.iloc[ -1 ];
 
@@ -174,34 +174,24 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
         130.68   43.56   0.5  1.3068   0.4356
 
         # 盈利总额占比
-        gain1 = ( 10.0 + 11.0 + 43.56 ) / 100
-              = 0.6456;
-        gain2 = 0.1 + 0.11 + 0.4356
-              = 0.6456;
+        gain1 = ( 10.0 + 11.0 + 43.56 ) / 100 = 0.6456;
+        gain2 = 0.1 + 0.11 + 0.4356 = 0.6456;
 
         # 亏损总额占比
-        loss1 = ( -12.1 - 21.78 ) / 100
-              = -0.3388;
-        loss2 = -0.121 - 0.2178
-              = -0.3388;
+        loss1 = ( -12.1 - 21.78 ) / 100 = -0.3388;
+        loss2 = -0.121 - 0.2178 = -0.3388;
 
         # 盈亏总额占比
-        total1 = ( 10.0 + 11.0 - 12.1 - 21.78 + 43.56 ) / 100
-               = 0.3068;
-        total2 = 0.1 + 0.11 - 0.121 - 0.2178 + 0.4356
-               = 0.3068;
+        total1 = ( 10.0 + 11.0 - 12.1 - 21.78 + 43.56 ) / 100 = 0.3068;
+        total2 = 0.1 + 0.11 - 0.121 - 0.2178 + 0.4356 = 0.3068;
 
         # 平均盈利占比
-        avgain1 = ( 10.0 + 11.0 + 43.56 ) / 3 / 100
-                = 0.2152;
-        avgain2 = ( 0.1 + 0.11 + 0.4356 ) / 3
-                = 0.2152;
+        avgain1 = ( 10.0 + 11.0 + 43.56 ) / 3 / 100 = 0.2152;
+        avgain2 = ( 0.1 + 0.11 + 0.4356 ) / 3 = 0.2152;
 
         # 平均亏损占比
-        avloss1 = ( -12.1 - 21.78 ) / 2 / 100
-                = -0.1694;
-        avloss2 = ( -0.121 - 0.2178 ) / 2
-                = -0.1694;
+        avloss1 = ( -12.1 - 21.78 ) / 2 / 100 = -0.1694;
+        avloss2 = ( -0.121 - 0.2178 ) / 2 = -0.1694;
 
         # 平均盈亏占比:
         average1 = ( 10.0 + 11.0 - 12.1 - 21.78 + 43.56 ) / 5 / 100
@@ -328,7 +318,7 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     rf = total / maxdd;
 
     # 夏普比率: 承受一单位的总风险产生的报酬, 反映承担相同单位风险可得的收益;
-    # 分子报酬率 μ 代表收益, 任意周期报酬率都需转换成年报酬率, 均值越大则收益越高, 夏普比例越高;
+    # 分子报酬率 μ 代表收益, 任意周期报酬率需转换成年报酬率. 均值越大则收益越高, 夏普比例越高;
     # 分母标准差 σ 代表风险, 标准差越趋近 0 则样本离散程度越小, 夏普比例越高;
     # 年化夏普比率转化: ( 分子 μ 系数: a ) / ( 分母 σ 系数: √( a ) ) = √( a );
     sharpe = ( days.mean() / days.std() ) * ( 365 ** 0.5 );
@@ -572,7 +562,9 @@ def make_mpf_style ():
 
     tick_color = ( 95, 102, 115 );
 
-    fig_color = face_color = ( 22, 26, 30 );
+    label_color = ( 120, 120, 120 );
+
+    fig_color = ( 22, 26, 30 );
 
     color_volume = { "up": make_color_tuple( up_color_volume ),
                      "down": make_color_tuple( down_color_volume ) };
@@ -590,6 +582,7 @@ def make_mpf_style ():
     style_rc = { "axes.linewidth": 0.8,
                  "axes.labelweight": 100,
                  "axes.unicode_minus": False,
+                 "axes.labelcolor": make_color_str( label_color ),
                  "xtick.color": make_color_str( tick_color ),
                  "ytick.color": make_color_str( tick_color ),
                  "font.weight": 100,
@@ -611,7 +604,9 @@ def make_mpf_style ():
 
     return style;
 
-def plot ( ohlc ):
+def plot ( ohlc, trades, custom ):
+
+    ap = [];
 
     l = t = 0.045;
 
@@ -625,35 +620,42 @@ def plot ( ohlc ):
 
     fig = mplfinance.figure( style = style );
 
-    h_o = ( 1 - t - b ) * 0.90;
-
-    h_v = ( 1 - t - b ) * 0.10;
-
-    h_e = ( 1 - t - b ) * 0.10;
+    # K 线图表;
+    h_o = ( 1 - t - b ) * 0.80;
 
     ax_o = fig.add_axes( [ l, 1 - ( t + h_o ), w, h_o ] );
 
-    ax_o.axes.set_xticks( ohlc.index );
+    ax_o.set_ylim( ohlc[ "Low" ].min() - ( ohlc[ "High" ].max() - ohlc[ "Low" ].min() ) * 0.2,
+                   ohlc[ "High" ].max() + ( ohlc[ "High" ].max() - ohlc[ "Low" ].min() ) * 0.2 );
 
-    ax_o.axes.ticklabel_format( axis = "y",
-                                style = "plain",
-                                useOffset = False );
+    # 交易量图表;
+    h_v = ( 1 - t - b ) * 0.10;
 
-    ax_v = fig.add_axes( [ l, b, w, h_v ], sharex = ax_o );
+    ax_v = fig.add_axes( [ l, 1 - ( t + h_o + h_v ), w, h_v ], sharex = ax_o );
 
     ax_v.axes.yaxis.tick_right();
 
-    ax_e = fig.add_axes( [ l, b, w, h_e ], sharex = ax_o );
+    ax_v.axes.yaxis.set_label_position( "right" );
+
+    # 资产占比图表;
+    h_e = ( 1 - t - b ) * 0.10;
+
+    ax_e = fig.add_axes( [ l, 1 - ( t + h_o + h_v + h_e ), w, h_e ], sharex = ax_o );
+
+    ax_e.set_ylim( trades[ "equitys" ].min() - ( trades[ "equitys" ].max() - trades[ "equitys" ].min() ) * 0.2,
+                   trades[ "equitys" ].max() + ( trades[ "equitys" ].max() - trades[ "equitys" ].min() ) * 0.2 );
+
+    ax_e.set_ylabel( "equity" );
 
     ax_e.axes.yaxis.tick_right();
 
-    # ax.plot(le.index, le.values, '^', color='lime', markersize=12,
-    #                label='long enter')
+    ax_e.axes.yaxis.set_label_position( "right" );
 
-    # add_plot = [ mplfinance.make_addplot( ohlc[ "Close" ] ) ];
+    ap_e = mplfinance.make_addplot( trades[ "equitys" ], type = "line", color = "#E67E22", width = 0.8, ax = ax_e );
 
-    
+    ap.append( ap_e );
 
+    custom and custom( locals() );
 
     mplfinance.plot( data = ohlc,
                      style = style,
@@ -662,15 +664,14 @@ def plot ( ohlc ):
                      ax = ax_o,
                      volume = ax_v,
                      volume_exponent = 0,
-                     # add_plot = add_plot,
-                     ylabel = "",
-                     ylabel_lower = "",
+                     addplot = ap,
+                     ylabel = "price",
+                     ylabel_lower = "volume",
                      show_nontrading = True,
                      datetime_format = "%y-%m-%d\n%H:%M",
                      warn_too_much_data = 60 * 24 * 365 * 6,
-                     scale_width_adjustment = dict( candle = 1.2,
-                                                    volume = 0.80 ) );
+                     scale_width_adjustment = dict( candle = 1.2, volume = 0.80 ) );
 
-    multiCursor = MultiCursor( fig.canvas, [ ax_o.axes, ax_v.axes ] );
+    multiCursor = MultiCursor( fig.canvas, [ ax_o.axes, ax_v.axes, ax_e.axes ] );
 
     mplfinance.show();
