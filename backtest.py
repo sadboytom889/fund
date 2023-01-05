@@ -78,6 +78,20 @@ class Backtest ( object ):
         return None;
 
     @cached_property
+    def trade_prices ( self ):
+        ''' 交易价格数据;
+        '''
+
+        if self.ohlc is None:
+            return None;
+
+        trade_prices = self.ohlc[ "Open" ];
+
+        trade_prices.name = "Trade Prices";
+
+        return trade_prices;
+
+    @cached_property
     def signals ( self ):
         ''' 输入信号数据: 在 store 中以键名 self.__signal_fields 来查找并返回
                          格式为 Series 且索引为 DatetimeIndex 的各信号列合并且与
@@ -118,20 +132,6 @@ class Backtest ( object ):
 
         return parts.calculate_positions(
             self.signals, self.__signal_output_fields ).shift().fillna( value = 0 );
-
-    @cached_property
-    def trade_prices ( self ):
-        ''' 交易价格数据;
-        '''
-
-        if self.ohlc is None:
-            return None;
-
-        trade_prices = self.ohlc[ "Open" ];
-
-        trade_prices.name = "Trade Prices";
-
-        return trade_prices;
 
     @cached_property
     def diff_volumes ( self ):
@@ -250,11 +250,69 @@ class Backtest ( object ):
             return parts.calculate_entry_prices( dataframe, *args );
 
     @cached_property
-    def fees ( self ):
-        ''' 手续费占比数据;
+    def rois ( self ):
+        ''' 投资回報率 ROI: 反映获利能力或效率, 依据当笔交易金额占比数据 diff_volume;
 
-            1: 计算依据当笔交易金额占比数据 diff_volume;
+            ROI = ( trade_prices - entry_prices ) / entry_prices
+                = ( trade_prices / entry_prices ) - 1;
+        '''
 
+        if self.positions is None:
+            return None;
+
+        directions = self.directions.mask(
+            self.end_points, other = self.directions.shift() );
+
+        rois = ( self.trade_prices / self.entry_prices ) - 1;
+
+        rois = rois * self.leverage * directions * ( self.diff_volumes * directions < 0 );
+
+        rois = rois.fillna( value = 0 );
+
+        return rois;
+
+    @cached_property
+    def roas1 ( self ):
+        ''' 资产回报率 ROA: 反映每单位资产创造利润的指标, 依据当笔交易金额占比数据 diff_volume;
+
+                  avbl + avbl * diff_volume * roi - avbl
+            ROA = --------------------------------------;
+                                 avbl
+
+                  avbl * ( 1 + diff_volume * roi - 1 )
+                = ------------------------------------;
+                                avbl
+
+                = diff_volume * roi;
+        '''
+
+        if self.positions is None:
+            return None;
+
+        directions = self.directions.mask(
+            self.end_points, other = self.directions.shift() );
+
+        return self.rois * self.diff_volumes * directions * -1;
+
+    @cached_property
+    def roas2 ( self ):
+        ''' 资产回报率 ROA: 反映每单位资产创造利润的指标, 数值为初始金额占比;
+        '''
+
+        return self.parts[ "roas" ];
+
+    @cached_property
+    def cumroas ( self ):
+        ''' 累计资产回报率 ROA;
+        '''
+
+        return self.parts[ "cumroas" ];
+
+    @cached_property
+    def fees1 ( self ):
+        ''' 手续费占比数据, 依据当笔交易金额占比数据 diff_volume;
+
+            当前余额: avbl;
 
                              avbl * diff_volume (交易金额占比)
             交易数量: size = --------------------------------- * leverage;
@@ -262,9 +320,9 @@ class Backtest ( object ):
 
             手续费占比: fees
 
-                      size * trade_price * fee_rate (手续费)
-                    = -------------------------------------
-                                 avbl (可用余额)
+                      size * trade_price * fee_rate (手续费率)
+                    = ---------------------------------------
+                                  avbl (可用余额)
 
                       diff_volume
                     = ----------- * leverage * trade_price * fee_rate
@@ -295,8 +353,32 @@ class Backtest ( object ):
         return self.diff_volumes * self.leverage * self.fee_rate * rate_series;
 
     @cached_property
+    def fees2 ( self ):
+        ''' 手续费占比数据, 数值为初始金额占比;
+        '''
+
+        return self.parts[ "fees" ];
+
+    @cached_property
+    def cumfees ( self ):
+        ''' 累计手续费占比数据;
+        '''
+
+        return self.parts[ "cumfees" ];
+
+    @cached_property
+    def equitys ( self ):
+        ''' 资产占比数据: 反映资产的变化(已计算手续费);
+        '''
+
+        return self.parts[ "equitys" ];
+
+    @cached_property
     def liq_prices ( self ):
         ''' 强平价格数据;
+
+            当前余额: avbl;
+
                              avbl * position
             持仓数量: size = ------------------ * lever;
                                entry_price
@@ -319,11 +401,10 @@ class Backtest ( object ):
             return None;
 
         dataframe_dict = { "t": self.times,
-                           "r": self.roas,
-                           "f": self.fees,
+                           "r": self.roas1,
+                           "f": self.fees1,
                            "p": self.positions,
                            "d": self.directions,
-                           "v": self.diff_volumes,
                            "e": self.entry_prices };
 
         args = [ self.leverage, *list( dataframe_dict.keys() )[ 1 : ] ]
@@ -331,7 +412,6 @@ class Backtest ( object ):
         dataframe = pandas.DataFrame( dataframe_dict );
 
         groups = dataframe.groupby( "t", group_keys = False );
-
 
         if len( groups ) > 1:
             return groups.apply( parts.calculate_liq_prices, *args );
@@ -348,76 +428,16 @@ class Backtest ( object ):
                ( ( self.directions < 0 ) & ( self.ohlc[ "High" ] > self.liq_prices ) );
 
     @cached_property
-    def rois ( self ):
-        ''' 投资回報率 ROI: 反映获利能力或效率;
-
-            1: 计算依据当笔交易金额占比数据 diff_volume;
-            2: 仅保留减仓或平仓周期的数据;
-            3: 未计算手续费;
-
-            ROI = ( trade_prices - entry_prices ) / entry_prices
-                = ( trade_prices / entry_prices ) - 1;
-
-        '''
-
-        if self.positions is None:
-            return None;
-
-        directions = self.directions.mask(
-            self.end_points, other = self.directions.shift() );
-
-        rois = ( self.trade_prices / self.entry_prices ) - 1;
-
-        rois = rois * self.leverage * directions * ( self.diff_volumes * directions < 0 );
-
-        rois = rois.fillna( value = 0 );
-
-        return rois;
-
-    @cached_property
-    def roas ( self ):
-        ''' 资产回报率 ROA: 反映每单位资产创造利润的指标;
-
-            1: 计算依据当笔交易;
-            2: 仅保留减仓或平仓周期的数据;
-            3: 未计算手续费;
-
-                  avbl + avbl * diff_volume * roi - avbl
-            ROA = --------------------------------------;
-                                 avbl
-
-                  avbl * ( 1 + diff_volume * roi - 1 )
-                = ------------------------------------;
-                                avbl
-
-                = diff_volume * roi;
-        '''
-
-        if self.positions is None:
-            return None;
-
-        directions = self.directions.mask(
-            self.end_points, other = self.directions.shift() );
-
-        return self.rois * self.diff_volumes * directions * -1;
-
-    @cached_property
-    def equitys ( self ):
-        ''' 资产占比数据: 反映资产的变化(已计算手续费)
-            1: 按照交易次数为交易分组;
-
-            2: 组内使用资产回报率 ROA 累加计算资产;
-               组内使用手续费 fee 累加计算总手续费;
-
-            3: 组内计算真实资产占比;
+    def parts ( self ):
+        ''' 部分初始金额占比数据字典;
         '''
 
         if self.positions is None:
             return None;
 
         dataframe_dict = { "t": self.times,
-                           "r": self.roas,
-                           "f": self.fees };
+                           "r": self.roas1,
+                           "f": self.fees1 };
 
         args = list( dataframe_dict.keys() );
 
@@ -431,6 +451,14 @@ class Backtest ( object ):
         if self.positions is None:
             return None;
 
+        dataframe_dict = { "t": self.times,
+                           "r": self.roas1,
+                           "f": self.fees1 };
+
+        args = list( dataframe_dict.keys() );
+
+        data = parts.calculate_equitys( dataframe_dict, *args );
+
         trades = pandas.DataFrame( dtype = float,
                                    index = self.positions.index );
 
@@ -442,9 +470,13 @@ class Backtest ( object ):
         trades[ "diff_vols" ] = self.diff_volumes;
         trades[ "pos" ] = self.positions;
         trades[ "rois" ] = self.rois;
-        trades[ "roas" ] = self.roas;
+        trades[ "roas1" ] = self.roas1;
+        trades[ "roas2" ] = self.roas2;
+        trades[ "cumroas" ] = self.cumroas;
+        trades[ "fees1" ] = self.fees1;
+        trades[ "fees2" ] = self.fees2;
+        trades[ "cumfees" ] = self.cumfees;
         trades[ "equitys" ] = self.equitys;
-        trades[ "fees" ] = self.fees;
         trades[ "liqs" ] = self.liqs;
 
         return trades;
@@ -453,18 +485,20 @@ class Backtest ( object ):
     def report ( self ):
         ''' 各种可供分析的指标;
         '''
+
         if self.positions is None:
             return None;
 
         return parts.performance_summary( self.ohlc,
                                           self.positions,
                                           self.diff_volumes,
-                                          self.roas,
+                                          self.rois,
                                           self.equitys );
 
     def summary ( self ):
         ''' 打印报告;
         '''
+
         if self.report is None:
             return None;
 
@@ -509,7 +543,7 @@ class Backtest ( object ):
 
             macos 不存在 SimHei 的问题;
                 1: 查看 matplotlib 字体文件路径:
-                    matplotlib.matplotlib_fname(),
+                    matplotlib.matplotlib_fname();
 
                 2: 官网下载字体文件:
                     https://www.fontpalace.com/font-download/simhei;
@@ -534,75 +568,4 @@ class Backtest ( object ):
                                              axes.unicode_minus: False;
         '''
 
-        parts.plot( self.ohlc );
-
-    def plot_equitys ( self ):
-        ''' 打印资产占比数据 equitys 图表;
-        '''
-
-        fig, ax_o = plt.subplots( 1, 1 );
-
-        ax_v = ax_o.twinx();
-
-        self.equitys.plot( color = "r", style = "-", ax = ax_o );
-        # self.ohlc.Close.plot( color = "g", style = "-", ax = ax_v );
-        # mpf.plot(self.ohlc, type='line')
-
-        mpf.plot( self.ohlc, type='candle', volume=True, show_nontrading = True)
-
-        # mpf.plot( data = self.ohlc,
-        #           type = "candle",
-        #           title = "candlestick",
-        #           style = "binance",
-        #           ylabel = "price($)",
-        #           ylabel_lower = "volume(shares)",
-        #           figratio = ( 12, 6 ),
-        #           volume = True,
-        #           show_nontrading = True );
-
-        #plt.plot( self.equitys );
-
-        #plt.plot( self.ohlc.Close );
-
-
-        # (price[ix] - price[ix][0]).resample('W').first().dropna() \
-        #     .plot(color='black', alpha=0.5, label='underlying', ax=ax)
-
-
-
-        plt.title( str( self ) );
-
-        plt.tick_params( labelsize = 6 );
-
-        plt.show();
-
-    def plot_trades ( self, subset = None ):
-        '''
-        '''
-
-        if subset is None:
-            subset = slice( None, None );
-
-        fr = self.trades.ix[subset]
-        le = fr.price[(fr.pos > 0) & (fr.vol > 0)]
-        se = fr.price[(fr.pos < 0) & (fr.vol < 0)]
-        lx = fr.price[(fr.pos.shift() > 0) & (fr.vol < 0)]
-        sx = fr.price[(fr.pos.shift() < 0) & (fr.vol > 0)]
-
-        import matplotlib.pylab as pylab
-        _ = None
-        if ax is None:
-            _,ax = pylab.subplots()
-
-        ax.plot(le.index, le.values, '^', color='lime', markersize=12,
-                   label='long enter')
-        ax.plot(se.index, se.values, 'v', color='red', markersize=12,
-                   label='short enter')
-        ax.plot(lx.index, lx.values, 'o', color='lime', markersize=7,
-                   label='long exit')
-        ax.plot(sx.index, sx.values, 'o', color='red', markersize=7,
-                   label='short exit')
-        
-        self.ohlc.O.ix[subset].plot(color='black', label='price', ax=ax)
-        ax.set_ylabel('Trades for %s' % subset)
-        return _,ax
+        parts.plot( self.ohlc, self.equitys, self.signals );

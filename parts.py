@@ -1,10 +1,5 @@
-import re;
-import numpy;
 import pandas;
 import mplfinance;
-import matplotlib.ticker;
-from matplotlib import pyplot as plt;
-from matplotlib.ticker import MultipleLocator, FormatStrFormatter, NullFormatter
 
 def calculate_positions ( signals, output_fields ):
 
@@ -84,7 +79,6 @@ def calculate_liq_prices ( group, leverage,
                                   fees_field,
                                   positions_field,
                                   directions_field,
-                                  diff_volumes_field,
                                   entry_prices_field ):
     mmr = 0.004;
 
@@ -95,8 +89,6 @@ def calculate_liq_prices ( group, leverage,
     positions = group[ positions_field ];
 
     directions = group[ directions_field ];
-
-    diff_volumes = group[ diff_volumes_field ];
 
     entry_prices = group[ entry_prices_field ];
 
@@ -141,29 +133,65 @@ def calculate_equitys ( dataframe_dict, times_field,
 
     grouped = dataframe.groupby( times_field, group_keys = False );
 
-    args = [];
+    args_fees = [];
+
+    args_cumfees = [];
+
+    args_roas = [];
+
+    args_cumroas = [];
+
+    args_equitys = [];
 
     rate = 1.0;
 
+    last_fees = 0.0;
+
     for times, group in grouped:
 
-        equitys = 1 + group[ roas_field ].cumsum();
+        roas = group[ roas_field ];
 
-        cumfees = group[ fees_field ].cumsum();
+        fees = group[ fees_field ];
 
-        equitys = equitys * rate;
+        cumroas = 1 + roas.cumsum();
+
+        cumfees = fees.cumsum();
+
+        fees = fees * rate;
+
+        roas = roas * rate;
+
+        cumroas = cumroas * rate;
 
         cumfees = cumfees * rate;
 
-        equitys = equitys + cumfees;
+        equitys = cumroas + cumfees;
+
+        cumfees = cumfees + last_fees;
+
+        cumroas = cumroas - 1;
 
         rate = equitys.iloc[ -1 ];
 
-        args.append( equitys );
+        last_fees = cumfees.iloc[ -1 ];
 
-    return pandas.concat( args );
+        args_fees.append( fees );
 
-def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
+        args_cumfees.append( cumfees );
+
+        args_roas.append( roas );
+
+        args_cumroas.append( cumroas );
+
+        args_equitys.append( equitys );
+
+    return { "roas": pandas.concat( args_roas ),
+             "cumroas": pandas.concat( args_cumroas ),
+             "fees": pandas.concat( args_fees ),
+             "cumfees": pandas.concat( args_cumfees ),
+             "equitys": pandas.concat( args_equitys ) };
+
+def performance_summary ( ohlc, positions, diff_volumes, rois, equitys ):
     '''
           avbl  profit  roas      eq      eqd
         100.00     0.0   0.0  1.0000      0.0
@@ -246,7 +274,7 @@ def performance_summary ( ohlc, positions, diff_volumes, roas, equitys ):
     freq = ohlc.index.inferred_freq;
 
     # 资产占比;
-    eq = equitys[ roas != 0 ];
+    eq = equitys[ rois != 0 ];
 
     # 资产变化占比;
     eqd = eq.diff().fillna( value = ( eq - 1 ) );
@@ -550,7 +578,7 @@ def make_mpf_style ():
 
     down_color_ohlc = ( 246, 71, 93 );
 
-    down_color_volume = ( ( 135, 49, 63 ) );
+    down_color_volume = ( 135, 49, 63 );
 
     up_color_ohlc = ( 13, 203, 129 );
 
@@ -604,7 +632,7 @@ def make_mpf_style ():
 
     return style;
 
-def plot ( ohlc, trades, custom ):
+def plot ( ohlc, equitys, signals ):
 
     ap = [];
 
@@ -623,15 +651,25 @@ def plot ( ohlc, trades, custom ):
     # K 线图表;
     h_o = ( 1 - t - b ) * 0.80;
 
-    ax_o = fig.add_axes( [ l, 1 - ( t + h_o ), w, h_o ] );
+    ax_o_min = ohlc[ "Low" ].min();
 
-    ax_o.set_ylim( ohlc[ "Low" ].min() - ( ohlc[ "High" ].max() - ohlc[ "Low" ].min() ) * 0.2,
-                   ohlc[ "High" ].max() + ( ohlc[ "High" ].max() - ohlc[ "Low" ].min() ) * 0.2 );
+    ax_o_max = ohlc[ "High" ].max();
+
+    ax_o_margin = ( ax_o_max - ax_o_min ) * 0.2;
+
+    ax_o_rect = [ l, 1 - ( t + h_o ), w, h_o ]
+
+    ax_o = fig.add_axes( ax_o_rect );
+
+    ax_o.set_ylim( ax_o_min - ax_o_margin,
+                   ax_o_max + ax_o_margin);
 
     # 交易量图表;
     h_v = ( 1 - t - b ) * 0.10;
 
-    ax_v = fig.add_axes( [ l, 1 - ( t + h_o + h_v ), w, h_v ], sharex = ax_o );
+    ax_v_rect = [ l, 1 - ( t + h_o + h_v ), w, h_v ];
+
+    ax_v = fig.add_axes( ax_v_rect, sharex = ax_o );
 
     ax_v.axes.yaxis.tick_right();
 
@@ -640,10 +678,18 @@ def plot ( ohlc, trades, custom ):
     # 资产占比图表;
     h_e = ( 1 - t - b ) * 0.10;
 
-    ax_e = fig.add_axes( [ l, 1 - ( t + h_o + h_v + h_e ), w, h_e ], sharex = ax_o );
+    ax_e_min = equitys.min();
 
-    ax_e.set_ylim( trades[ "equitys" ].min() - ( trades[ "equitys" ].max() - trades[ "equitys" ].min() ) * 0.2,
-                   trades[ "equitys" ].max() + ( trades[ "equitys" ].max() - trades[ "equitys" ].min() ) * 0.2 );
+    ax_e_max = equitys.max();
+
+    ax_e_margin = ( ax_e_max - ax_e_min ) * 0.2;
+
+    ax_e_rect = [ l, 1 - ( t + h_o + h_v + h_e ), w, h_e ];
+
+    ax_e = fig.add_axes( ax_e_rect, sharex = ax_o );
+
+    ax_e.set_ylim( ax_e_min - ax_e_margin,
+                   ax_e_max + ax_e_margin );
 
     ax_e.set_ylabel( "equity" );
 
@@ -651,11 +697,52 @@ def plot ( ohlc, trades, custom ):
 
     ax_e.axes.yaxis.set_label_position( "right" );
 
-    ap_e = mplfinance.make_addplot( trades[ "equitys" ], type = "line", color = "#E67E22", width = 0.8, ax = ax_e );
-
+    ap_e = mplfinance.make_addplot( equitys,
+                                    type = "line",
+                                    color = "#E67E22",
+                                    width = 0.8,
+                                    ax = ax_e );
     ap.append( ap_e );
 
-    custom and custom( locals() );
+    # 交易信号图表;
+    signals = signals.where( signals == 0,
+                             axis = 0,
+                             other = ohlc[ "Close" ] );
+
+    signals = signals.replace( 0, None );
+
+    ap.append( mplfinance.make_addplot( signals[ "Buy" ],
+                                        type = "scatter",
+                                        linewidths = 0.8,
+                                        markersize = 20,
+                                        marker = 6,
+                                        color = "#207350",
+                                        alpha = 1,
+                                        ax = ax_o ) );
+
+    ap.append( mplfinance.make_addplot( signals[ "Sell" ],
+                                        type = "scatter",
+                                        linewidths = 0.8,
+                                        markersize = 20,
+                                        marker = "x",
+                                        color = "#207350",
+                                        ax = ax_o ) );
+
+    ap.append( mplfinance.make_addplot( signals[ "Short" ],
+                                        type = "scatter",
+                                        linewidths = 0.8,
+                                        markersize = 20,
+                                        marker = 7,
+                                        color = "#87313F",
+                                        ax = ax_o ) );
+
+    ap.append( mplfinance.make_addplot( signals[ "Cover" ],
+                                        type = "scatter",
+                                        linewidths = 0.8,
+                                        markersize = 20,
+                                        marker = "x",
+                                        color = "#87313F",
+                                        ax = ax_o ) );
 
     mplfinance.plot( data = ohlc,
                      style = style,
@@ -670,7 +757,8 @@ def plot ( ohlc, trades, custom ):
                      show_nontrading = True,
                      datetime_format = "%y-%m-%d\n%H:%M",
                      warn_too_much_data = 60 * 24 * 365 * 6,
-                     scale_width_adjustment = dict( candle = 1.2, volume = 0.80 ) );
+                     scale_width_adjustment = dict( candle = 1.2,
+                                                    volume = 0.80 ) );
 
     multiCursor = MultiCursor( fig.canvas, [ ax_o.axes, ax_v.axes, ax_e.axes ] );
 

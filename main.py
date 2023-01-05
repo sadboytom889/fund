@@ -160,11 +160,6 @@ print( "\n>  bt.positions\n%s\n\n" % bt.positions );
 print( "\n>  bt.trades\n%s\n\n" % bt.trades );
 
 bt.summary();
-bt.plot();
 
-# bt.plot( lambda params: params[ "ap" ].append( mplfinance.make_addplot( params[ "ohlc" ][ "Close" ],
-#                                                                         type = "line",
-#                                                                         color = "r",
-#                                                                         width = 0.8,
-#                                                                         ax =  params[ "ax_o" ] ) ) );
+bt.plot();
 
