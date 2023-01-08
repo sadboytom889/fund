@@ -70,7 +70,7 @@ class Backtest ( object ):
         if isinstance( ohlc, pandas.DataFrame ) and \
            isinstance( ohlc.index, pandas.DatetimeIndex ) and \
            ohlc.index.inferred_freq is not None and \
-           not bool( [ False for column_fields in self.__ohlc_need_include_fields \
+           not bool( [ column_fields for column_fields in self.__ohlc_need_include_fields \
                        if column_fields not in ohlc.columns.values ] ):
 
             return ohlc;
@@ -299,12 +299,18 @@ class Backtest ( object ):
         ''' 资产回报率 ROA: 反映每单位资产创造利润的指标, 数值为初始金额占比;
         '''
 
+        if self.parts is None:
+            return None;
+
         return self.parts[ "roas" ];
 
     @cached_property
     def cumroas ( self ):
         ''' 累计资产回报率 ROA;
         '''
+
+        if self.parts is None:
+            return None;
 
         return self.parts[ "cumroas" ];
 
@@ -357,6 +363,9 @@ class Backtest ( object ):
         ''' 手续费占比数据, 数值为初始金额占比;
         '''
 
+        if self.parts is None:
+            return None;
+
         return self.parts[ "fees" ];
 
     @cached_property
@@ -364,12 +373,18 @@ class Backtest ( object ):
         ''' 累计手续费占比数据;
         '''
 
+        if self.parts is None:
+            return None;
+
         return self.parts[ "cumfees" ];
 
     @cached_property
     def equitys ( self ):
         ''' 资产占比数据: 反映资产的变化(已计算手续费);
         '''
+
+        if self.parts is None:
+            return None;
 
         return self.parts[ "equitys" ];
 
@@ -450,14 +465,6 @@ class Backtest ( object ):
 
         if self.positions is None:
             return None;
-
-        dataframe_dict = { "t": self.times,
-                           "r": self.roas1,
-                           "f": self.fees1 };
-
-        args = list( dataframe_dict.keys() );
-
-        data = parts.calculate_equitys( dataframe_dict, *args );
 
         trades = pandas.DataFrame( dtype = float,
                                    index = self.positions.index );
@@ -567,5 +574,8 @@ class Backtest ( object ):
                        删注释, 并改为 False: # axes.unicode_minus: True ->
                                              axes.unicode_minus: False;
         '''
+
+        if self.ohlc is None or self.positions is None:
+            return None;
 
         parts.plot( self.ohlc, self.equitys, self.signals );

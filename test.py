@@ -83,7 +83,7 @@ index = pandas.date_range( start = pandas.to_datetime( "1993-03-01 00:00:00", ut
                            end = pandas.to_datetime( "1993-03-30 00:00:00", utc = True,
                                                                             errors = "raise",
                                                                             format = "%Y-%m-%d %H:%M:%S" ) );
-
+print("index", index)
 # buy: 市价开仓做多信号
 buy = pandas.Series( data = [ ( 16529.20 * 0.1000 ) / 125 / 14976.8306,
                               ( 16540.80 * 0.2000 ) / 125 / 14976.8306,

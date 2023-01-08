@@ -73,8 +73,8 @@ class Ohlcfetcher ( object ):
         ''' 用 self.__colmap 各项 key 生成类型为各项 value 的空 Series;
 
             用各项值为空 Series 的字典 emptycol: { '...': Series([], dtype: ...),
-                                                '...': Series([], dtype: ...),
-                                                '...': Series([], dtype: ...) };
+                                                 '...': Series([], dtype: ...),
+                                                 '...': Series([], dtype: ...) };
 
             用 intervals 时间周期(Timedelta 对象)作 key, emptycol 生成的 DataFrame 作 value 生成函数返回值:
             { Timedelta('...'): Empty DataFrame   Timedelta('...'): Empty DataFrame
