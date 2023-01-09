@@ -51,6 +51,8 @@ class Strategy ( object ):
             for item in data:
                 self.add_rows( item );
 
+    def run ( self ):
+
         print( "self.ohlc", self.ohlc )
 
 
@@ -91,4 +93,4 @@ data = pandas.read_csv( "./test.csv", header = 0,
 
 # add_item( data );
 add_list( data );
-
+strategy.run();
